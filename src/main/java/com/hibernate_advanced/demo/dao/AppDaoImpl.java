@@ -54,6 +54,19 @@ public class AppDaoImpl implements AppDao {
 		mergeInstructor(23, "Timmy", "Turner", "timmy.turner@example.com");
 	}
 
+	@Override
+	@Transactional
+	public void deleteInstructorDetail(int id) {
+		InstructorDetail instructorDetail = entityManager.find(InstructorDetail.class, id);
+		if (instructorDetail != null) {
+			Instructor instructor = instructorDetail.getInstructor();
+			if (instructor != null) {
+				instructor.setInstructorDetail(null);
+			}
+			entityManager.remove(instructorDetail);
+		}
+	}
+
 	private void mergeInstructorDetail(int id, String subject, String hobby) {
 		entityManager.createNativeQuery("""
 				MERGE INTO instructor_detail target
