@@ -1,8 +1,12 @@
 package com.hibernate_advanced.demo.dao;
 
+import com.hibernate_advanced.demo.entity.Course;
 import com.hibernate_advanced.demo.entity.Instructor;
 import com.hibernate_advanced.demo.entity.InstructorDetail;
+import com.hibernate_advanced.demo.entity.Student;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.TypedQuery;
+import java.util.List;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,18 +26,149 @@ public class AppDaoImpl implements AppDao {
 	}
 
 	@Override
+	@Transactional
+	public void save(Course course) {
+		entityManager.persist(course);
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public boolean courseExistsByTitle(String title) {
+		Long count = entityManager.createQuery(
+				"SELECT COUNT(c) FROM Course c WHERE c.title = :title", Long.class)
+				.setParameter("title", title)
+				.getSingleResult();
+		return count > 0;
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public Course findCourseAndStudentsByTitle(String title) {
+		TypedQuery<Course> query = entityManager.createQuery(
+				"SELECT c FROM Course c JOIN FETCH c.students WHERE c.title = :title",
+				Course.class);
+		query.setParameter("title", title);
+		return query.getResultList().stream().findFirst().orElse(null);
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public Student findStudentAndCoursesByEmail(String email) {
+		TypedQuery<Student> query = entityManager.createQuery(
+				"SELECT s FROM Student s JOIN FETCH s.courses WHERE s.email = :email",
+				Student.class);
+		query.setParameter("email", email);
+		return query.getResultList().stream().findFirst().orElse(null);
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public Course findCourseAndReviews() {
+		TypedQuery<Course> query = entityManager.createQuery(
+				"SELECT c FROM Course c JOIN FETCH c.reviews ORDER BY c.id DESC",
+				Course.class);
+		List<Course> courses = query.setMaxResults(1).getResultList();
+		return courses.isEmpty() ? null : courses.get(0);
+	}
+
+	@Override
+	@Transactional
+	public void update(Instructor instructor) {
+		entityManager.merge(instructor);
+	}
+
+	@Override
+	@Transactional
+	public void update(Student student) {
+		entityManager.merge(student);
+	}
+
+	@Override
+	@Transactional
+	public void deleteCourseById(int id) {
+		TypedQuery<Course> query = entityManager.createQuery(
+				"SELECT c FROM Course c LEFT JOIN FETCH c.students WHERE c.id = :id",
+				Course.class);
+		query.setParameter("id", id);
+		Course course = query.getResultList().stream().findFirst().orElse(null);
+		if (course == null) {
+			return;
+		}
+
+		for (Student student : course.getStudents()) {
+			student.getCourses().remove(course);
+		}
+		course.getStudents().clear();
+
+		entityManager.remove(course);
+	}
+
+	@Override
+	@Transactional
+	public void deleteStudentById(int id) {
+		TypedQuery<Student> query = entityManager.createQuery(
+				"SELECT s FROM Student s LEFT JOIN FETCH s.courses WHERE s.id = :id",
+				Student.class);
+		query.setParameter("id", id);
+		Student student = query.getResultList().stream().findFirst().orElse(null);
+		if (student == null) {
+			return;
+		}
+
+		for (Course course : student.getCourses()) {
+			course.getStudents().remove(student);
+		}
+
+		entityManager.remove(student);
+	}
+
+	@Override
 	@Transactional(readOnly = true)
 	public Instructor findInstructorById(int id) {
 		return entityManager.find(Instructor.class, id);
 	}
 
 	@Override
+	@Transactional(readOnly = true)
+	public Instructor findInstructorWithCourses(int id) {
+		return entityManager.find(Instructor.class, id);
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public List<Course> findCoursesByInstructorId(int id) {
+		TypedQuery<Course> query = entityManager.createQuery(
+				"FROM Course WHERE instructor.id = :data", Course.class);
+		query.setParameter("data", id);
+		return query.getResultList();
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public Instructor findInstructorByIdJoinFetch(int id) {
+		TypedQuery<Instructor> query = entityManager.createQuery(
+				"SELECT i FROM Instructor i " +
+						"JOIN FETCH i.courses " +
+						"JOIN FETCH i.instructorDetail " +
+						"WHERE i.id = :data",
+				Instructor.class);
+		query.setParameter("data", id);
+		return query.getResultList().stream().findFirst().orElse(null);
+	}
+
+	@Override
 	@Transactional
 	public void deleteInstructorById(int id) {
 		Instructor instructor = entityManager.find(Instructor.class, id);
-		if (instructor != null) {
-			entityManager.remove(instructor);
+		if (instructor == null) {
+			return;
 		}
+
+		for (Course course : instructor.getCourses()) {
+			course.setInstructor(null);
+		}
+
+		entityManager.remove(instructor);
 	}
 
 	@Override
